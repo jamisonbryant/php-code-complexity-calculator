@@ -31,8 +31,56 @@ if (defined('PHP_CODESNIFFER_VERBOSITY') === false) {
     define('PHP_CODESNIFFER_VERBOSITY', false);
 }
 
+function findArgvOption($array, $entry) {
+    $index = array_search($entry, $array);
+    if ($index !== false) {
+        $result = array_slice($array, $index, 2);
+        return $result;
+    }
+    return false;
+}
+
+function formatPretty($data, &$output) {
+    array_walk($data, function ($data) use (&$output) {
+        $scores = array_map(function ($cyclomatic, $cognitive) {
+            return vsprintf('%d = cy(%d) * co(%d)', [$cognitive * $cyclomatic, $cognitive, $cyclomatic]);
+        }, $data['cyclomatic'], $data['cognitive']);
+
+        $output .= "\n\n\tFile : {$data['file']}";
+        $methods = join("\n\t\t  ", $scores);
+        $output .= "\n\tMethods : {$methods}";
+    });
+}
+
+function formatCsv($data, &$output) {
+    $output .= "File,Complexity,Cognitive,Cyclomatic\n";
+    array_walk($data, function ($data) use (&$output) {
+        $scores = array_map(function ($cyclomatic, $cognitive) {
+            return vsprintf('%d,%d,%d', [$cognitive * $cyclomatic, $cognitive, $cyclomatic]);
+        }, $data['cyclomatic'], $data['cognitive']);       
+
+        foreach ($scores as $score) {
+            $output .= vsprintf("%s,%s\n", [
+                $data['file'],
+                $score
+            ]);
+        }
+
+        // $scores = array_map(function ($cyclomatic, $cognitive) {
+        //     return vsprintf('%d = cy(%d) * co(%d)', [$cognitive * $cyclomatic, $cognitive, $cyclomatic]);
+        // }, $data['cyclomatic'], $data['cognitive']);
+
+        // $output .= "\n\n\tFile : {$data['file']}";
+        // $methods = join("\n\t\t  ", $scores);
+        // $output .= "\n\tMethods : {$methods}";
+    });
+}
+
 // Remove the script name
 array_shift($argv);
+
+// Pop named arguments
+$format = findArgvOption($argv, '--format');
 
 /*/ Only use files that exist /*/
 $files = array_filter($argv, function ($file) {
@@ -85,21 +133,15 @@ $data = array_map(function ($file, $cyclomatic, $cognitive) {
 
 /*/ Build Output /*/
 $output = '';
-array_walk($data, function ($data) use (&$output) {
-    $scores = array_map(function ($cyclomatic, $cognitive) {
-        return  vsprintf('%d = cy(%d) * co(%d)', [$cognitive * $cyclomatic, $cognitive,$cyclomatic]);
-    }, $data['cyclomatic'], $data['cognitive']);
-
-    $methods = join("\n                  ", $scores);
-    $output .= <<<"TXT"
-
-           File : {$data['file']}
-        Methods : {$methods}
-
-TXT
-    ;
-});
-
+switch ($format[1]) {
+    default:
+    case 'pretty':
+        formatPretty($data, $output);
+        break;
+    case 'csv':
+        formatCsv($data, $output);
+        break;
+}
 
 echo $output;
 
